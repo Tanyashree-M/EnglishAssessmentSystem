@@ -1,324 +1,217 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Assessment Results</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Arial', sans-serif; }
-        body { background-color: #f5f7fa; min-height: 100vh; }
-        .container { max-width: 900px; margin: 0 auto; padding: 20px; }
-        .header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid #e0e0e0; margin-bottom: 30px; }
-        .logo { display: flex; align-items: center; }
-        .logo-icon { width: 40px; height: 40px; background-color: #3a55a3; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 10px; color: white; font-size: 18px; font-weight: bold; }
-        .logo-text h1 { color: #3a55a3; font-size: 20px; margin-bottom: 2px; }
-        .logo-text p { color: #666; font-size: 12px; }
-        /* Styles from quiz.html for header consistency */
-        .assessment-info { display: flex; flex-direction: column; text-align: right; }
-        .student-info { font-size: 14px; color: #333; margin-bottom: 8px; font-weight: 600; }
-        .logout-btn { background-color: #d9534f; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: all 0.3s; font-weight: 500; }
-        .logout-btn:hover { background-color: #c9302c; }
-        .logout-btn:disabled { background-color: #e48481; cursor: not-allowed; }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Assessment Results</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Arial', sans-serif; }
+body { background-color: #f5f7fa; min-height: 100vh; }
+.container { max-width: 900px; margin: 0 auto; padding: 20px; }
+.header { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid #e0e0e0; margin-bottom: 30px; }
+.logo { display: flex; align-items: center; }
+.logo-icon { width: 40px; height: 40px; background-color: #3a55a3; border-radius: 8px; display: flex; align-items: center; justify-content: center; margin-right: 10px; color: white; font-size: 18px; font-weight: bold; }
+.logo-text h1 { color: #3a55a3; font-size: 20px; margin-bottom: 2px; }
+.logo-text p { color: #666; font-size: 12px; }
+.assessment-info { display: flex; flex-direction: column; text-align: right; }
+.student-info { font-size: 14px; color: #333; margin-bottom: 8px; font-weight: 600; }
+.logout-btn { background-color: #d9534f; color: white; border: none; padding: 8px 15px; border-radius: 5px; cursor: pointer; font-size: 14px; transition: all 0.3s; font-weight: 500; }
+.logout-btn:hover { background-color: #c9302c; }
+.logout-btn:disabled { background-color: #e48481; cursor: not-allowed; }
+.logout-spinner { display: inline-block; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.3); border-radius: 50%; border-top-color: #fff; animation: spin 1s ease-in-out infinite; margin-right: 8px; vertical-align: middle; }
+@keyframes spin { to { transform: rotate(360deg); } }
 
-        /* *** NEW: CSS for the logout spinner *** */
-        .logout-spinner {
-            display: inline-block;
-            width: 14px;
-            height: 14px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: #fff;
-            animation: spin 1s ease-in-out infinite;
-            margin-right: 8px;
-            vertical-align: middle;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
-
-        .results-summary { background-color: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; text-align: center; }
-        .results-summary h1 { font-size: 28px; color: #333; margin-bottom: 15px; }
-        .results-summary h2 { font-size: 48px; margin-bottom: 10px; }
-        .results-summary .pass { color: #2e8b57; }
-        .results-summary .fail { color: #d9534f; }
-        .results-summary p { color: #666; font-size: 16px; }
-        .summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-top: 20px; text-align: left; }
-        .summary-item { background-color: #f8f9fa; padding: 15px; border-radius: 8px; }
-        .summary-item h3 { font-size: 14px; color: #666; margin-bottom: 5px; }
-        .summary-item p { font-size: 18px; color: #333; font-weight: bold; }
-        .topic-performance, .detailed-review { background-color: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; }
-        .topic-performance h2, .detailed-review h2 { font-size: 22px; color: #333; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
-        .topic-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
-        .topic-name { font-size: 16px; color: #333; }
-        .topic-score { font-size: 16px; color: #3a55a3; font-weight: bold; }
-        .question-review-item { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
-        .question-review-item:last-child { border-bottom: none; margin-bottom: 0; }
-        .review-question-text { font-size: 18px; color: #333; margin-bottom: 15px; }
-        .review-answer { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
-        .your-answer { background-color: #f0f4ff; border-left: 4px solid #3a55a3; }
-        .correct-answer { background-color: #eaf7ec; border-left: 4px solid #2e8b57; }
-        .incorrect-answer { background-color: #fdeeee; border-left: 4px solid #d9534f; }
-        .answer-label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 5px; }
-        .unanswered { color: #888; font-style: italic; }
-        .error-message { text-align: center; padding: 40px; background-color: #f8d7da; color: #721c24; border-radius: 10px; margin-top: 30px;}
-    </style>
+.results-summary { background-color: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; text-align: center; }
+.results-summary h1 { font-size: 28px; color: #333; margin-bottom: 15px; }
+.results-summary h2 { font-size: 48px; margin-bottom: 10px; }
+.results-summary .pass { color: #2e8b57; }
+.results-summary .fail { color: #d9534f; }
+.results-summary p { color: #666; font-size: 16px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 20px; margin-top: 20px; text-align: left; }
+.summary-item { background-color: #f8f9fa; padding: 15px; border-radius: 8px; }
+.summary-item h3 { font-size: 14px; color: #666; margin-bottom: 5px; }
+.summary-item p { font-size: 18px; color: #333; font-weight: bold; }
+.topic-performance, .detailed-review { background-color: white; border-radius: 10px; box-shadow: 0 0 10px rgba(0,0,0,0.05); padding: 30px; margin-bottom: 30px; }
+.topic-performance h2, .detailed-review h2 { font-size: 22px; color: #333; margin-bottom: 20px; border-bottom: 1px solid #eee; padding-bottom: 10px; }
+.topic-item { display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px; }
+.topic-name { font-size: 16px; color: #333; }
+.topic-score { font-size: 16px; color: #3a55a3; font-weight: bold; }
+.question-review-item { border-bottom: 1px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
+.question-review-item:last-child { border-bottom: none; margin-bottom: 0; }
+.review-question-text { font-size: 18px; color: #333; margin-bottom: 15px; }
+.review-answer { padding: 10px; border-radius: 5px; margin-bottom: 10px; }
+.your-answer { background-color: #f0f4ff; border-left: 4px solid #3a55a3; }
+.correct-answer { background-color: #eaf7ec; border-left: 4px solid #2e8b57; }
+.incorrect-answer { background-color: #fdeeee; border-left: 4px solid #d9534f; }
+.answer-label { font-weight: bold; font-size: 14px; display: block; margin-bottom: 5px; }
+.unanswered { color: #888; font-style: italic; }
+.error-message { text-align: center; padding: 40px; background-color: #f8d7da; color: #721c24; border-radius: 10px; margin-top: 30px;}
+</style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <div class="logo">
-                <div class="logo-icon">EA</div>
-                <div class="logo-text">
-                    <h1>English Assessment</h1>
-                    <p>Student Examination</p>
-                </div>
-            </div>
-            <div class="assessment-info">
-                <div class="student-info" id="studentInfo">Student: Loading...</div>
-                <button id="logout-btn" class="logout-btn">Exit & Logout</button>
+<div class="container">
+    <div class="header">
+        <div class="logo">
+            <div class="logo-icon">EA</div>
+            <div class="logo-text">
+                <h1>English Assessment</h1>
+                <p>Student Examination</p>
             </div>
         </div>
-        
-        <div id="resultsContent">
-             <div id="loader" style="text-align: center; padding: 50px; font-size: 18px;">
-                <p>Analyzing your results, please wait...</p>
-            </div>
+        <div class="assessment-info">
+            <div class="student-info" id="studentInfo">Student: Loading...</div>
+            <button id="logout-btn" class="logout-btn">Exit & Logout</button>
         </div>
     </div>
 
-    <script>
-        let isLoggingOut = false;
+    <div id="resultsContent">
+        <div id="loader" style="text-align: center; padding: 50px; font-size: 18px;">
+            <p>Loading your results, please wait...</p>
+        </div>
+    </div>
+</div>
 
-        async function logout() {
-            if (isLoggingOut) return;
-            if (confirm("Are you sure you want to exit and log out?")) {
-                isLoggingOut = true;
-                const logoutBtn = document.getElementById('logout-btn');
-                if (logoutBtn) {
-                    logoutBtn.disabled = true;
-                    logoutBtn.innerHTML = '<span class="logout-spinner"></span>Logging out...';
-                }
-                sessionStorage.clear();
-                setTimeout(() => {
-                    window.location.replace('/index.html');
-                }, 500);
-            }
+<script>
+let isLoggingOut = false;
+
+async function logout() {
+    if (isLoggingOut) return;
+    if (confirm("Are you sure you want to exit and log out?")) {
+        isLoggingOut = true;
+        const logoutBtn = document.getElementById('logout-btn');
+        if (logoutBtn) {
+            logoutBtn.disabled = true;
+            logoutBtn.innerHTML = '<span class="logout-spinner"></span>Logging out...';
+        }
+        sessionStorage.clear();
+        setTimeout(() => { window.location.replace('/index.html'); }, 500);
+    }
+}
+
+document.getElementById('logout-btn').addEventListener('click', logout);
+
+window.onload = async function() {
+    const urlParams = new URLSearchParams(window.location.search);
+    const studentId = urlParams.get('studentId');
+    const assessmentId = urlParams.get('assessmentId');
+    const resultsContent = document.getElementById('resultsContent');
+    const loader = document.getElementById('loader');
+
+    if (!studentId || !assessmentId) {
+        resultsContent.innerHTML = `<div class="error-message">Missing studentId or assessmentId in URL</div>`;
+        return;
+    }
+
+    try {
+        const res = await fetch(`/api/student/${studentId}/results?assessmentId=${assessmentId}`);
+        if (!res.ok) throw new Error('Failed to fetch results from server');
+
+        const resultData = await res.json();
+        console.log("RESULT DATA:", resultData);
+        if (!resultData.results || resultData.results.length === 0) {
+            resultsContent.innerHTML = `<div class="error-message">No results found for this assessment.</div>`;
+            return;
         }
 
-        window.onload = async function() {
-            const resultsContent = document.getElementById('resultsContent');
-            const loader = document.getElementById('loader');
-            const logoutBtn = document.getElementById('logout-btn');
-            
-            if (logoutBtn) {
-                logoutBtn.addEventListener('click', logout);
-            }
+        displayResults(resultData);
 
-            try {
-                const submissionDataString = sessionStorage.getItem('quizSubmission');
-                if (!submissionDataString) {
-                    throw new Error("No submission data found. Please complete an assessment first.");
-                }
-                const submissionData = JSON.parse(submissionDataString);
-                
-                const response = await fetch(`/api/assessment/${submissionData.assessmentId}`);
-                if (!response.ok) {
-                    throw new Error("Could not fetch assessment details to verify answers.");
-                }
-                const assessment = await response.json();
-                
-                const finalResults = processResults(submissionData, assessment);
-                await saveResultsToDatabase(finalResults);
-                saveResultsToLocalStorage(finalResults);
-                displayResults(finalResults);
 
-            } catch (error) {
-                console.error("Error loading results:", error);
-                resultsContent.innerHTML = `<div class="error-message"><h2>Error</h2><p>${error.message}</p></div>`;
-            } finally {
-                if (loader) loader.style.display = 'none';
-            }
-        };
+    } catch (err) {
+        console.error(err);
+        resultsContent.innerHTML = `<div class="error-message"><h2>Error</h2><p>${err.message}</p></div>`;
+    } finally {
+        if (loader) loader.style.display = 'none';
+    }
+};
 
-        async function saveResultsToDatabase(results) {
-            if (!results.studentId || !results.assessmentId) {
-                console.error("Cannot save results to database: studentId or assessmentId is missing.");
-                return;
-            }
-            try {
-                const response = await fetch('/api/results/save', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(results),
-                });
-                const data = await response.json();
-                if (!response.ok || !data.success) {
-                    console.error('Failed to save results to the database:', data.message);
-                } else {
-                    console.log('Results successfully saved to the database.');
-                    sessionStorage.removeItem('quizSubmission');
-                }
-            } catch (error) {
-                console.error('An error occurred while trying to save results to the database:', error);
-            }
+function displayResults(resultData) {
+    const resultsContent = document.getElementById('resultsContent');
+    const studentInfoDiv = document.getElementById('studentInfo');
+    const result = resultData.results[0];
+
+    if (studentInfoDiv) studentInfoDiv.textContent = `Student: ${resultData.studentName}`;
+
+    const totalScore = result.score || 0;
+    const maxScore = result.maxScore || 0;
+    const percentage = maxScore>0 ? Math.round((totalScore / maxScore) * 100) : 0;
+
+    const passed = percentage >= result.passScore;
+    const timeSpent = Math.round(result.timeSpent / 1000);
+    const formattedDate = new Intl.DateTimeFormat('en-IN', { dateStyle:'medium', timeStyle:'short', timeZone:'Asia/Kolkata'}).format(new Date(result.completedDate));
+
+    const topicPerformance = result.topicPerformance;
+
+    let html = `
+    <div class="results-summary">
+        <h1>${result.assessmentTitle} - Results</h1>
+        <h2 class="${passed ? 'pass':'fail'}">${passed ? 'Passed':'Failed'}</h2>
+        <p>Thank you for completing the assessment, ${resultData.studentName}.</p>
+        <div class="summary-grid">
+            <div class="summary-item"><h3>Your Score</h3><p>${totalScore} / ${maxScore}</p></div>
+            <div class="summary-item"><h3>Percentage</h3><p>${percentage}%</p></div>
+            <div class="summary-item"><h3>Time Spent</h3><p>${timeSpent}s</p></div>
+            <div class="summary-item"><h3>Date Completed</h3><p>${formattedDate}</p></div>
+        </div>
+    </div>
+
+    <div class="topic-performance">
+        <h2>Areas for Improvement</h2>
+        ${Object.keys(topicPerformance).length > 0
+            ? Object.keys(topicPerformance).map(topic => `
+                <div class="topic-item">
+                    <span class="topic-name">${topic}</span>
+                    <span class="topic-score">
+                        ${topicPerformance[topic].percentage}% Correct
+                    </span>
+                </div>
+            `).join('')
+            : `<p>No topic analysis available.</p>`
         }
+    </div>
 
-        // *** MODIFIED: Refactored scoring logic to handle question subsets correctly ***
-        function processResults(submission, assessment) {
-            const fullQuestionBank = assessment.questions;
-            const studentResponsesWithId = submission.responses;
-
-            // Create a Map for efficient O(1) lookups of the full question details by their unique ID
-            const questionBankMap = new Map(fullQuestionBank.map(q => [q.id, q]));
-
-            const detailedResponses = studentResponsesWithId.map(studentResponse => {
-                const fullQuestionData = questionBankMap.get(studentResponse.questionId);
-
-                if (!fullQuestionData) {
-                    console.warn(`Could not find question with ID ${studentResponse.questionId} in the assessment bank.`);
-                    return null;
-                }
-                
-                const isCorrect = checkIfCorrect(studentResponse.answer, fullQuestionData);
-                
-                let studentAnswerText;
-                if (fullQuestionData.type === 'mcq' || fullQuestionData.type === 'multiple-choice') {
-                    studentAnswerText = studentResponse.isAnswered ? fullQuestionData.options[studentResponse.answer] : "Not Answered";
-                } else {
-                    studentAnswerText = studentResponse.isAnswered ? studentResponse.answer : "Not Answered";
-                }
-                
-                let correctAnswerText;
-                 if (fullQuestionData.type === 'mcq' || fullQuestionData.type === 'multiple-choice') {
-                    correctAnswerText = fullQuestionData.options[fullQuestionData.correctAnswer];
-                } else {
-                    correctAnswerText = fullQuestionData.correctAnswer;
-                }
-
-                return {
-                    questionId: fullQuestionData.id,
-                    questionType: fullQuestionData.type,
-                    questionText: fullQuestionData.text,
-                    studentAnswer: studentResponse.answer,
-                    studentAnswerText: studentAnswerText,
-                    correctAnswer: fullQuestionData.correctAnswer,
-                    correctAnswerText: correctAnswerText,
-                    isCorrect: isCorrect,
-                    topic: fullQuestionData.topic || "General"
-                };
-            }).filter(r => r !== null); // Filter out any questions that couldn't be matched
-
-            const score = calculateScore(detailedResponses);
-            const topicPerformance = calculateTopicPerformance(detailedResponses);
-            const passed = score.percentage >= submission.passScore;
-
-            return { ...submission, ...score, passed, topicPerformance, responses: detailedResponses };
-        }
-
-        function displayResults(results) {
-            const resultsContent = document.getElementById('resultsContent');
-            const studentInfoDiv = document.getElementById('studentInfo');
-            const timeSpent = new Date(results.timeUsed * 1000).toISOString().substr(14, 5);
-            const submissionDate = new Date();
-            const formattedDate = new Intl.DateTimeFormat('en-IN', { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Asia/Kolkata' }).format(submissionDate);
-
-            if (studentInfoDiv) {
-                studentInfoDiv.textContent = `Student: ${results.studentName}`;
-            }
-
-            let resultsHTML = `
-                <div class="results-summary">
-                    <h1>${results.assessmentTitle} - Results</h1>
-                    <h2 class="${results.passed ? 'pass' : 'fail'}">${results.passed ? 'Passed' : 'Failed'}</h2>
-                    <p>Thank you for completing the assessment, ${results.studentName}. Here is your performance summary.</p>
-                    <div class="summary-grid">
-                        <div class="summary-item"><h3>Your Score</h3><p>${results.totalScore} / ${results.maxScore}</p></div>
-                        <div class="summary-item"><h3>Percentage</h3><p>${results.percentage}%</p></div>
-                        <div class="summary-item"><h3>Passing Score</h3><p>${results.passScore}%</p></div>
-                        <div class="summary-item"><h3>Time Used</h3><p>${timeSpent}</p></div>
-                        <div class="summary-item"><h3>Date Completed</h3><p>${formattedDate}</p></div>
+    <div class="detailed-review">
+        <h2>Detailed Question Review</h2>
+        ${
+            result.responses && result.responses.length > 0
+            ? result.responses.map((q, index) => `
+                <div class="question-review-item">
+                    <div class="review-question-text">
+                        Q${index + 1}. ${q.questionText}
                     </div>
-                </div>
-            `;
-            
-            resultsHTML += `
-                <div class="topic-performance">
-                    <h2>Areas for Improvement</h2>
-                    ${Object.keys(results.topicPerformance).map(topic => `
-                        <div class="topic-item">
-                            <span class="topic-name">${topic}</span>
-                            <span class="topic-score">${results.topicPerformance[topic].percentage}% Correct</span>
-                        </div>
-                    `).join('')}
-                </div>
-            `;
 
-            resultsHTML += `
-                <div class="detailed-review">
-                    <h2>Detailed Question Review</h2>
-                    ${results.responses.map(res => `
-                        <div class="question-review-item">
-                            <p class="review-question-text">${res.questionText}</p>
-                            <div class="review-answer ${res.isCorrect ? 'your-answer' : 'incorrect-answer'}">
-                                <span class="answer-label">Your Answer ${res.isCorrect ? '✔' : '✖'}</span>
-                                <span class="${res.studentAnswer === null ? 'unanswered' : ''}">${res.studentAnswerText}</span>
-                            </div>
-                            ${!res.isCorrect ? `
+                    <div class="review-answer your-answer">
+                        <span class="answer-label">Your Answer:</span>
+                        ${
+                            q.studentAnswerText
+                            ? q.studentAnswerText
+                            : '<span class="unanswered">Not Answered</span>'
+                        }
+                    </div>
+
+                    ${
+                        q.isCorrect
+                        ? `
                             <div class="review-answer correct-answer">
-                                <span class="answer-label">Correct Answer</span>
-                                ${res.correctAnswerText}
+                                <span class="answer-label">Correct Answer:</span>
+                                ${q.correctAnswerText}
                             </div>
-                            ` : ''}
-                        </div>
-                    `).join('')}
+                        `
+                        : `
+                            <div class="review-answer incorrect-answer">
+                                <span class="answer-label">Correct Answer:</span>
+                                ${q.correctAnswerText}
+                            </div>
+                        `
+                    }
                 </div>
-            `;
-
-            resultsContent.innerHTML = resultsHTML;
+            `).join('')
+            : `<p>No detailed responses available.</p>`
         }
+    </div>
+    `;
 
-        function checkIfCorrect(answer, question) {
-            if (answer === null || answer === undefined) return false;
-            if (question.type === "mcq" || question.type === "multiple-choice") {
-                return answer === question.correctAnswer;
-            } else if (question.type === "fill-blank") {
-                return String(answer).toLowerCase().trim() === String(question.correctAnswer).toLowerCase().trim();
-            }
-            return false;
-        }
-
-        function calculateScore(responses) {
-            const correctCount = responses.filter(r => r.isCorrect).length;
-            const totalScore = correctCount;
-            const maxScore = responses.length;
-            const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 100) : 0;
-            return { totalScore, maxScore, percentage };
-        }
-
-        function calculateTopicPerformance(responses) {
-            const topicPerformance = {};
-            responses.forEach(response => {
-                const topic = response.topic;
-                if (!topicPerformance[topic]) {
-                    topicPerformance[topic] = { total: 0, correct: 0 };
-                }
-                topicPerformance[topic].total++;
-                if (response.isCorrect) {
-                    topicPerformance[topic].correct++;
-                }
-            });
-            for (const topic in topicPerformance) {
-                const perf = topicPerformance[topic];
-                perf.percentage = Math.round((perf.correct / perf.total) * 100);
-            }
-            return topicPerformance;
-        }
-        
-        function saveResultsToLocalStorage(results) {
-            let allResults = localStorage.getItem('assessmentResults');
-            let resultsArray = allResults ? JSON.parse(allResults) : [];
-            resultsArray.push(results);
-            localStorage.setItem('assessmentResults', JSON.stringify(resultsArray));
-        }
-
-    </script>
+    resultsContent.innerHTML = html;
+}
+</script>
 </body>
 </html>
