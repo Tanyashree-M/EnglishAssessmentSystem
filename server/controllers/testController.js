@@ -1,4 +1,5 @@
 const banditService = require("../services/banditService");
+const { saveAssessmentResultHelper } = require("./studentController");
 const { v4: uuidv4 } = require("uuid");
 
 exports.getNextQuestion = async (req, res) => {
@@ -148,101 +149,87 @@ exports.getNextQuestion = async (req, res) => {
 
 exports.completeAssessment = async (req, res) => {
   try {
-
     const { student_id, assessment_id } = req.body;
 
     if (!student_id || !assessment_id) {
       return res.status(400).json({ error: "Invalid session" });
     }
 
-    // 1️⃣ Get student UUID
-    const studentResult = await req.pool.query(
-      "SELECT id FROM students WHERE student_id = $1",
+    // 1️⃣ Get student UUID and name
+    const studentRes = await req.pool.query(
+      "SELECT id, full_name FROM students WHERE student_id = $1",
       [student_id]
     );
+    if (studentRes.rows.length === 0) return res.status(404).json({ error: "Student not found" });
 
-    if (studentResult.rows.length === 0) {
-      return res.status(404).json({ error: "Student not found" });
-    }
+    const studentUUID = studentRes.rows[0].id;
+    const studentName = studentRes.rows[0].full_name;
 
-    const studentUUID = studentResult.rows[0].id;
-
-    // 2️⃣ Fetch attempt
+    // 2️⃣ Fetch assessment attempt
     const attemptRes = await req.pool.query(
-      `
-      SELECT id, completed, answers
-      FROM student_assessments
-      WHERE student_id = $1 AND assessment_id = $2
-      `,
+      "SELECT id, completed, answers, start_time FROM student_assessments WHERE student_id = $1 AND assessment_id = $2",
       [studentUUID, assessment_id]
     );
-
-    if (attemptRes.rows.length === 0) {
-      return res.status(404).json({ error: "Assessment attempt not found" });
-    }
+    if (attemptRes.rows.length === 0) return res.status(404).json({ error: "Assessment attempt not found" });
 
     const attempt = attemptRes.rows[0];
+    if (attempt.completed) return res.json({ message: "Already completed" });
 
-    if (attempt.completed) {
-      return res.json({ message: "Already completed" });
-    }
-    
-    // ================= FETCH QUESTIONS =================
-    const assessmentResult = await req.pool.query(
-      "SELECT questions, questions_to_attempt FROM assessments WHERE id = $1",
+    // 3️⃣ Fetch assessment info
+    const assessmentRes = await req.pool.query(
+      "SELECT questions, questions_to_attempt, pass_score FROM assessments WHERE id = $1",
       [assessment_id]
     );
+    if (assessmentRes.rows.length === 0) return res.status(404).json({ error: "Assessment not found" });
 
-    if (assessmentResult.rows.length === 0) {
-      return res.status(404).json({ error: "Assessment not found" });
-    }
+    const assessment = assessmentRes.rows[0];
+    const passingScore = Number(assessment.pass_score) || 50;
 
-    const questions = Array.isArray(assessmentResult.rows[0].questions)
-      ? assessmentResult.rows[0].questions
-      : [];
-
-    const questionsToAttempt = assessmentResult.rows[0].questions_to_attempt;
-    const maxQuestions = Math.max(Number(questionsToAttempt) || 0, 15);
-
-    // 3️⃣ Parse answers
-    const answers = Array.isArray(attempt.answers)
-      ? attempt.answers
-      : JSON.parse(attempt.answers || "[]");
-
+    // 4️⃣ Parse answers
+    const answers = Array.isArray(attempt.answers) ? attempt.answers : JSON.parse(attempt.answers || "[]");
     const correctCount = answers.filter(a => a.correct === true).length;
     const total = answers.length;
     const score = total > 0 ? (correctCount / total) * 100 : 0;
 
-    // 4️⃣ Update completion
-   const result = await req.pool.query(
-    `
-    UPDATE student_assessments
-    SET completed = TRUE,
-        end_time = CURRENT_TIMESTAMP,
-        score = $3
-    WHERE student_id = $1
-      AND assessment_id = $2
-    RETURNING completed, score;
-    `,
-  [studentUUID, assessment_id, score]
+    // 5️⃣ Calculate time used (in seconds)
+    const startTime = attempt.start_time ? new Date(attempt.start_time) : new Date();
+    const endTime = new Date();
+    const timeUsed = Math.round((endTime - startTime) / 1000);
 
-);
+    // 6️⃣ Update student_assessments
+    await req.pool.query(
+      `UPDATE student_assessments
+       SET completed = TRUE,
+           end_time = CURRENT_TIMESTAMP,
+           score = $3,
+           time_spent = $4
+       WHERE student_id = $1 AND assessment_id = $2`,
+      [studentUUID, assessment_id, score, timeUsed]
+    );
 
-    await banditService.resetBandit(studentUUID);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Assessment record not found" });
-    }
+    // 7️⃣ Save to dedicated results table
+    const studentFullResult = {
+      studentId: student_id,
+      assessmentId: assessment_id,
+      studentName,
+      responses: answers,
+      percentage: score,
+      passed: score >= passingScore,
+      timeUsed
+    };
+    await saveAssessmentResultHelper(req.pool, studentFullResult);
 
     console.log("✅ Assessment completed");
 
     return res.json({
       success: true,
-      score
+      score,
+      passed: studentFullResult.passed,
+      timeUsed
     });
 
   } catch (err) {
     console.error("completeAssessment error:", err);
-    res.status(500).json({ error: "Server error" });
+    return res.status(500).json({ error: "Server error" });
   }
-};  
+};
