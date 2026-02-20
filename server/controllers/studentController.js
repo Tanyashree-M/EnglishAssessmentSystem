@@ -38,6 +38,56 @@ async function createAssessmentResultsTable(pool, assessmentCode) {
     }
 }
 
+exports.saveAssessmentResultHelper = async (pool, data) => {
+  const { studentId, assessmentId, studentName, responses, percentage, passed, timeUsed } = data;
+
+  if (!studentId || !assessmentId || !studentName || responses === undefined || percentage === undefined || passed === undefined || timeUsed === undefined) {
+    throw new Error("Missing required result data");
+  }
+
+  // Get student UUID
+  const studentRes = await pool.query('SELECT id FROM students WHERE student_id = $1', [studentId]);
+  if (studentRes.rows.length === 0) throw new Error(`Student ${studentId} not found`);
+  const studentUUID = studentRes.rows[0].id;
+
+  // Get assessment code
+  const assessmentRes = await pool.query('SELECT code FROM assessments WHERE id = $1', [assessmentId]);
+  if (assessmentRes.rows.length === 0) throw new Error("Assessment not found");
+  const assessmentCode = assessmentRes.rows[0].code;
+
+  // Ensure results table exists
+  await createAssessmentResultsTable(pool, assessmentCode);
+  const tableName = getResultsTableName(assessmentCode);
+
+  // Insert into dedicated table
+  const insertQuery = format(
+    'INSERT INTO %I (id, student_uuid, student_identifier, student_name, assessment_id, score_percentage, passed, time_spent_seconds, responses) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)',
+    tableName
+  );
+
+  await pool.query(insertQuery, [
+    uuidv4(),
+    studentUUID,
+    studentId,
+    studentName,
+    assessmentId,
+    percentage,
+    passed,
+    timeUsed,
+    JSON.stringify(responses)
+  ]);
+
+  // Also update main student_assessments table
+  await pool.query(
+    `UPDATE student_assessments
+     SET end_time = CURRENT_TIMESTAMP, completed = true, answers = $1, score = $2, time_spent = $3
+     WHERE student_id = $4 AND assessment_id = $5 AND completed = false`,
+    [JSON.stringify(responses), percentage, timeUsed, studentUUID, assessmentId]
+  );
+
+  return true;
+};
+
 exports.getStudentById = async (req, res, pool) => {
     try {
         const { id } = req.params;
@@ -150,29 +200,103 @@ exports.updateStudent = async (req, res, pool) => {
 exports.getStudentResults = async (req, res, pool) => {
     try {
         const { studentId } = req.params;
-        const studentResult = await pool.query('SELECT * FROM students WHERE student_id = $1', [studentId]);
-        if (studentResult.rows.length === 0) return res.status(404).json({ message: 'Student not found' });
+        const { assessmentId } = req.query;
 
-        const student = studentResult.rows[0];
-        const completedAssessmentsResult = await pool.query(
-            'SELECT sa.*, a.title FROM student_assessments sa JOIN assessments a ON sa.assessment_id = a.id WHERE sa.student_id = $1 AND sa.completed = true',
-            [student.id]
+        if (!assessmentId) {
+            return res.status(400).json({ message: "assessmentId is required" });
+        }
+
+        const studentResult = await pool.query(
+            'SELECT id, full_name FROM students WHERE student_id = $1',
+            [studentId]
         );
 
-        if (completedAssessmentsResult.rows.length === 0) return res.status(404).json({ message: 'No completed assessments found' });
+        if (studentResult.rows.length === 0)
+            return res.status(404).json({ message: 'Student not found' });
 
-        const results = completedAssessmentsResult.rows.map(sa => ({
-            assessmentId: sa.assessment_id,
-            assessmentTitle: sa.title,
-            completedDate: sa.end_time,
-            score: sa.score,
-            timeSpent: sa.time_spent || 'Not recorded'
-        }));
+        const student = studentResult.rows[0];
 
-        res.json({ studentName: student.full_name, results });
+        const saResult = await pool.query(
+            `SELECT sa.*, a.title, a.questions, a.pass_score
+             FROM student_assessments sa
+             JOIN assessments a ON sa.assessment_id = a.id
+             WHERE sa.student_id = $1 
+             AND a.code = $2
+             AND sa.completed = true`,
+            [student.id, assessmentId]
+        );
+
+        if (saResult.rows.length === 0)
+            return res.status(404).json({ message: 'No completed assessment found' });
+
+        const sa = saResult.rows[0];
+        const studentResponses = sa.answers || [];
+        const questionBank = sa.questions || [];
+
+        const questionMap = new Map(
+            questionBank.map(q => [q.id, q])
+        );
+
+        const detailedResponses = [];
+        let correctCount = 0;
+
+        for (let response of studentResponses) {
+            const question = questionMap.get(response.question_id);
+            if (!question) continue;
+
+            const isCorrect = response.selected_option === question.correctAnswer;
+
+            if (isCorrect) correctCount++;
+
+            detailedResponses.push({
+                questionText: question.text,
+                studentAnswerText:
+                    question.options?.[response.selected_option],
+                correctAnswerText:
+                    question.options?.[question.correctAnswer],
+                isCorrect,
+                topic: question.topic || "General"
+            });
+        }
+
+
+        const maxScore = detailedResponses.length;
+        const percentage = maxScore>0 ? Math.round((correctCount / maxScore) * 100) : 0;
+
+        const topicPerformance = {};
+
+        detailedResponses.forEach(r => {
+            if (!topicPerformance[r.topic]) {
+                topicPerformance[r.topic] = { total: 0, correct: 0 };
+            }
+            topicPerformance[r.topic].total++;
+            if (r.isCorrect) topicPerformance[r.topic].correct++;
+        });
+
+        for (let topic in topicPerformance) {
+            const t = topicPerformance[topic];
+            t.percentage = Math.round((t.correct / t.total) * 100);
+        }
+
+        res.json({
+            studentName: student.full_name,
+            results: [{
+                assessmentId: sa.assessment_id,
+                assessmentTitle: sa.title,
+                completedDate: sa.end_time,
+                score: correctCount,
+                maxScore,
+                percentage,
+                passScore: sa.pass_score,
+                timeSpent: sa.time_spent,
+                topicPerformance,
+                responses: detailedResponses
+            }]
+        });
+
     } catch (error) {
-        console.error('Error fetching results:', error);
-        res.status(500).json({ message: 'Server error while fetching results' });
+        console.error("Error fetching detailed results:", error);
+        res.status(500).json({ message: "Server error while fetching results" });
     }
 };
 
