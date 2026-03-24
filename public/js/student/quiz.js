@@ -87,7 +87,7 @@ function renderQuestion(q) {
   currentQuestion = q;
 
   document.getElementById("questionNumber").textContent =
-    `Question ${questionCount}`;
+    `Question ${questionCount + 1}`;
 
   document.getElementById("progressBar").style.width =
     `${Math.min(questionCount * 5, 100)}%`;

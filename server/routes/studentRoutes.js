@@ -18,6 +18,6 @@ module.exports = (pool) => {
     // Actually, `server.js` usually mounts `app.use('/api', studentRoutes)` etc.
     // So if I mount this router at `/api`, then `/results/save` works.
     router.post('/results/save', (req, res) => studentController.saveAssessmentResult(req, res, pool));
-
+    router.get('/student/:studentId/results/all', (req, res) =>studentController.getAllResults(req, res, pool));
     return router;
 };

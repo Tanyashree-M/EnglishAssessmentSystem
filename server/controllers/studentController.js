@@ -197,6 +197,42 @@ exports.updateStudent = async (req, res, pool) => {
     }
 };
 
+exports.getAllResults = async (req, res, pool) => {
+    try {
+        const { studentId } = req.params;
+
+        const studentResult = await pool.query(
+            'SELECT id FROM students WHERE student_id = $1',
+            [studentId]
+        );
+
+        if (studentResult.rows.length === 0) {
+            return res.status(404).json({ message: 'Student not found' });
+        }
+
+        const dbStudentId = studentResult.rows[0].id;
+
+        const result = await pool.query(
+            `SELECT 
+                a.title,
+                sa.end_time,
+                sa.score,
+                sa.completed
+             FROM student_assessments sa
+             JOIN assessments a ON sa.assessment_id = a.id
+             WHERE sa.student_id = $1
+             ORDER BY sa.end_time DESC`,
+            [dbStudentId]
+        );
+
+        res.json(result.rows);
+
+    } catch (error) {
+        console.error("Error fetching all results:", error);
+        res.status(500).json({ message: "Server error" });
+    }
+};
+
 exports.getStudentResults = async (req, res, pool) => {
     try {
         const { studentId } = req.params;
@@ -239,29 +275,34 @@ exports.getStudentResults = async (req, res, pool) => {
 
         const detailedResponses = [];
         let correctCount = 0;
-
+        let weightedScore = 0;
+        let totalWeight = 0;
         for (let response of studentResponses) {
             const question = questionMap.get(response.question_id);
             if (!question) continue;
 
+            const weight = question.difficulty || 1; 
+            totalWeight += weight;
+
             const isCorrect = response.selected_option === question.correctAnswer;
 
-            if (isCorrect) correctCount++;
+            if (isCorrect) {
+                weightedScore += weight;
+            }
 
             detailedResponses.push({
                 questionText: question.text,
-                studentAnswerText:
-                    question.options?.[response.selected_option],
-                correctAnswerText:
-                    question.options?.[question.correctAnswer],
+                studentAnswerText: question.options?.[response.selected_option],
+                correctAnswerText: question.options?.[question.correctAnswer],
                 isCorrect,
-                topic: question.topic || "General"
+                topic: question.topic || "General",
+                weight // (optional but useful for debugging)
             });
         }
 
-
-        const maxScore = detailedResponses.length;
-        const percentage = maxScore>0 ? Math.round((correctCount / maxScore) * 100) : 0;
+        const percentage = totalWeight > 0
+        ? Math.round((weightedScore / totalWeight) * 100)
+        : 0;
 
         const topicPerformance = {};
 
@@ -284,8 +325,8 @@ exports.getStudentResults = async (req, res, pool) => {
                 assessmentId: sa.assessment_id,
                 assessmentTitle: sa.title,
                 completedDate: sa.end_time,
-                score: correctCount,
-                maxScore,
+                score: weightedScore,
+                maxScore: totalWeight,
                 percentage,
                 passScore: sa.pass_score,
                 timeSpent: sa.time_spent,

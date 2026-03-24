@@ -125,14 +125,17 @@
 
             async function loadResults(studentId) {
                 try {
-                    const res = await fetch(`/api/student/${studentId}/results`);
+                    const res = await fetch(`/api/student/${studentId}/results/all`);
                     const data = await res.json();
                     const tbody = document.getElementById('results-table-body');
                     tbody.innerHTML = '';
 
-                    if (data && data.length > 0) {
-                        data.forEach(r => {
+                    const results = data || [];
+
+                    if (results.length > 0) {
+                        results.forEach(r => {
                             const date = new Date(r.end_time).toLocaleDateString();
+
                             const tr = document.createElement('tr');
                             tr.innerHTML = `
                                 <td style="padding: 12px; border-bottom: 1px solid #dee2e6;">${r.title}</td>
@@ -143,7 +146,7 @@
                             tbody.appendChild(tr);
                         });
                     } else {
-                        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center; padding: 20px;">No assessments taken yet.</td></tr>';
+                        tbody.innerHTML = '<tr><td colspan="4">No results found</td></tr>';
                     }
                 } catch (e) {
                     console.error(e);
