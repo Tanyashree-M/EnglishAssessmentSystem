@@ -1,163 +1,161 @@
-from mabwiser.mab import MAB, LearningPolicy
 import os
-import pickle
-import json
-import numpy as np
-from collections import Counter, defaultdict
+import psycopg2
+from dotenv import load_dotenv
 import random
+
+# -------------------------
+# Load ENV
+# -------------------------
+load_dotenv()
+DATABASE_URL = os.getenv("DATABASE_URL")
+
+# -------------------------
+# DB Connection
+# -------------------------
+conn = psycopg2.connect(DATABASE_URL)
+conn.autocommit = True
+
+with conn.cursor() as cur:
+    cur.execute("SELECT NOW();")
+    print("DB Connected:", cur.fetchone())
 
 # -------------------------
 # Arms (difficulty levels)
 # -------------------------
 arms = ['1', '2', '3', '4', '5']
-MODEL_DIR = "bandit_models"
 
 MIN_EXPLORATION = 3
 EXPLOIT_PROB = 0.7
 MIN_SAMPLES_FOR_EXPLOIT = 3
 
 # -------------------------
-# Paths
+# Initialize student arms
 # -------------------------
-def get_model_path(student_id):
-    return f"{MODEL_DIR}/{student_id}.pkl"
-
-def get_history_path(student_id):
-    return f"{MODEL_DIR}/{student_id}_history.json"
-
-# -------------------------
-# History
-# -------------------------
-def load_history(student_id):
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    path = get_history_path(student_id)
-
-    if os.path.exists(path):
-        with open(path, "r") as f:
-            return json.load(f)
-
-    return {"decisions": [], "rewards": []}
-
-# -------------------------
-# Model
-# -------------------------
-def load_model(student_id):
-    os.makedirs(MODEL_DIR, exist_ok=True)
-    path = get_model_path(student_id)
-
-    if os.path.exists(path):
-        with open(path, "rb") as f:
-            return pickle.load(f)
-
-    return MAB(
-        arms,
-        learning_policy=LearningPolicy.EpsilonGreedy(epsilon=0.1)
-    )
-
-def save_model(bandit, student_id):
-    with open(get_model_path(student_id), "wb") as f:
-        pickle.dump(bandit, f)
+def initialize_student(student_id):
+    with conn.cursor() as cur:
+        for arm in arms:
+            cur.execute("""
+                INSERT INTO student_bandit (student_id, arm)
+                VALUES (%s, %s)
+                ON CONFLICT (student_id, arm) DO NOTHING
+            """, (student_id, arm))
 
 # -------------------------
 # Predict next difficulty
 # -------------------------
 def get_next_difficulty(student_id):
-    history = load_history(student_id)
+    initialize_student(student_id)
 
-    decisions = np.array(history["decisions"], dtype=str)
-    rewards = np.array(history["rewards"], dtype=int)
+    with conn.cursor() as cur:
+        cur.execute("""
+            SELECT arm, successes, failures
+            FROM student_bandit
+            WHERE student_id = %s
+        """, (student_id,))
+        rows = cur.fetchall()
 
-    arm_counts = Counter(decisions)
-    print(f"\n[DEBUG] Student {student_id} arm counts → {arm_counts}")
+    data = {
+        arm: {"successes": 0, "failures": 0}
+        for arm in arms
+    }
+
+    for row in rows:
+        data[row[0]] = {
+            "successes": row[1],
+            "failures": row[2]
+        }
+
+    print(f"\n[DEBUG] Bandit data → {data}")
 
     # 1️⃣ Initial Exploration
-    under_sampled = [arm for arm in arms if arm_counts.get(arm, 0) < MIN_EXPLORATION]
-    print(f"[DEBUG] Under-sampled arms → {under_sampled}")
+    under_sampled = [
+        arm for arm in arms
+        if (data[arm]["successes"] + data[arm]["failures"]) < MIN_EXPLORATION
+    ]
 
     if under_sampled:
         chosen = random.choice(under_sampled)
-        print(f"[EXPLORE - INITIAL] Choosing under-sampled difficulty → {chosen}")
+        print(f"[EXPLORE - INITIAL] Selected → {chosen}")
         return chosen
 
-    # 2️⃣ Bayesian Mean Calculation
-    rewards_per_arm = defaultdict(list)
-    for d, r in zip(decisions, rewards):
-        rewards_per_arm[d].append(r)
+    # 2️⃣ Beta Mean Calculation
+    print("\n[DEBUG] Bayesian Means per arm:")
 
-    best_arms = []
     best_mean = -1
+    best_arms = []
 
-    print("\n[DEBUG] Beta Mean per arm:")
     for arm in arms:
-        samples = rewards_per_arm[arm]
-        if len(samples) >= MIN_SAMPLES_FOR_EXPLOIT:
-            a = sum(samples) + 1
-            b = len(samples) - sum(samples) + 1
-            mean = a / (a + b)
+        s = data[arm]["successes"]
+        f = data[arm]["failures"]
+        samples = s + f
 
-            print(f"  Arm {arm} → samples={len(samples)}, mean={mean:.3f}")
+        # Always compute mean (even if low samples)
+        a = s + 1
+        b = f + 1
+        mean = a / (a + b)
 
+        print(f"Arm {arm} → successes={s}, failures={f}, mean={mean:.3f}")
+
+        # Only consider for exploitation if enough samples
+        if samples >= MIN_SAMPLES_FOR_EXPLOIT:
             if mean > best_mean:
                 best_mean = mean
                 best_arms = [arm]
             elif mean == best_mean:
                 best_arms.append(arm)
-        else:
-            print(f"  Arm {arm} → insufficient samples ({len(samples)})")
 
     if not best_arms:
         chosen = random.choice(arms)
-        print(f"[FALLBACK] No confident arm → random choice {chosen}")
+        print(f"[FALLBACK] Selected → {chosen}")
         return chosen
-
-    print(f"[DEBUG] Best arms → {best_arms} (mean={best_mean:.3f})")
 
     # 3️⃣ Exploit vs Explore
     if random.random() < EXPLOIT_PROB:
         chosen = max(best_arms, key=int)
-        print(f"[EXPLOIT] Choosing best difficulty → {chosen}")
+        print(f"[EXPLOIT] Selected → {chosen}")
         return chosen
 
     explore_arms = [arm for arm in arms if arm not in best_arms]
     chosen = random.choice(explore_arms) if explore_arms else random.choice(arms)
-    print(f"[EXPLORE] Exploring non-best difficulty → {chosen}")
+
+    print(f"[EXPLORE] Selected → {chosen}")
     return chosen
 
+
 # -------------------------
-# Update bandit (per student)
+# Update bandit
 # -------------------------
 def update_bandit(student_id, decision, reward):
-    if decision is None or reward is None:
-        print("[WARN] Invalid bandit update skipped")
-        return
-
     decision = str(decision)
     reward = int(reward)
 
     print(f"[MAB UPDATE] decision={decision}, reward={reward}")
 
-    bandit = load_model(student_id)
-    bandit.partial_fit(
-        np.array([decision]),
-        np.array([reward])
-    )
-    save_model(bandit, student_id)
+    initialize_student(student_id)
 
-    history = load_history(student_id)
-    history["decisions"].append(decision)
-    history["rewards"].append(reward)
+    with conn.cursor() as cur:
+        if reward == 1:
+            cur.execute("""
+                UPDATE student_bandit
+                SET successes = successes + 1
+                WHERE student_id = %s AND arm = %s
+            """, (student_id, decision))
+        else:
+            cur.execute("""
+                UPDATE student_bandit
+                SET failures = failures + 1
+                WHERE student_id = %s AND arm = %s
+            """, (student_id, decision))
 
-    with open(get_history_path(student_id), "w") as f:
-        json.dump(history, f)
+    print("[MAB UPDATE] DB updated")
 
-    print("[MAB UPDATE] History updated successfully")
 
+# -------------------------
+# Reset bandit
+# -------------------------
 def reset_bandit(student_id):
-    pkl_path = os.path.join(MODEL_DIR, f"{student_id}.pkl")
-    json_path = os.path.join(MODEL_DIR, f"{student_id}.json")
-
-    if os.path.exists(pkl_path):
-        os.remove(pkl_path)
-
-    if os.path.exists(json_path):
-        os.remove(json_path)
+    with conn.cursor() as cur:
+        cur.execute("""
+            DELETE FROM student_bandit
+            WHERE student_id = %s
+        """, (student_id,))
