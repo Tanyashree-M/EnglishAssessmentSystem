@@ -630,7 +630,7 @@
                     if (authToken) {
                         const controller = new AbortController();
                         const timeoutId = setTimeout(() => controller.abort(), 5000);
-                        await fetch('http://localhost:3002/api/admin/logout', {
+                        await fetch('{API_BASE_URL}/api/admin/logout', {
                             method: 'POST',
                             headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${authToken}` },
                             credentials: 'include',
